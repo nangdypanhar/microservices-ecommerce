@@ -1,0 +1,29 @@
+services:
+  order-service:
+    container_name: order-service
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"
+    depends_on:
+      - order-postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://order-postgres:5432/order_db
+      SPRING_DATASOURCE_USERNAME: order_user
+      SPRING_DATASOURCE_PASSWORD: order_password
+
+  order-postgres:
+    image: postgres:17
+    container_name: order-postgres
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: order_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - order-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  order-postgres-data:
