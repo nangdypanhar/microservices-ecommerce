@@ -1,9 +1,12 @@
 package com.example.orderservice.service;
 
+import com.example.orderservice.client.InventoryClient;
 import com.example.orderservice.client.ProductClient;
 import com.example.orderservice.dto.order.CreateOrderRequest;
 import com.example.orderservice.dto.order.OrderResponse;
 import com.example.orderservice.dto.order.UpdateOrderRequest;
+import com.example.orderservice.dto.order.inventory.InventoryResponse;
+import com.example.orderservice.dto.order.inventory.ReserveInventoryRequest;
 import com.example.orderservice.dto.order.orderItem.OrderItemRequest;
 import com.example.orderservice.dto.order.product.ProductResponse;
 import com.example.orderservice.entity.Order;
@@ -26,6 +29,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderMapper orderMapper;
     private final ProductClient productClient;
+    private final InventoryClient inventoryClient;
 
     public OrderResponse createOrder(CreateOrderRequest request) {
 
@@ -34,6 +38,7 @@ public class OrderService {
                 .map(OrderItemRequest::productId)
                 .toList();
 
+        // Get all products in one request
         List<ProductResponse> products =
                 productClient.getProducts(productIds);
 
@@ -43,6 +48,17 @@ public class OrderService {
                         product -> product
                 ));
 
+        // Get all inventories in one request
+        List<InventoryResponse> inventories =
+                inventoryClient.getInventories(productIds);
+
+        Map<Long, InventoryResponse> inventoryMap =
+                inventories.stream()
+                        .collect(Collectors.toMap(
+                                InventoryResponse::productId,
+                                inventory -> inventory
+                        ));
+
         Order order = Order.builder()
                 .userId(request.userId())
                 .totalAmount(BigDecimal.ZERO)
@@ -51,17 +67,49 @@ public class OrderService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        List<OrderItem> items = request.items().stream()
+        List<OrderItem> items = request.items()
+                .stream()
                 .map(itemRequest -> {
 
+                    Long productId = itemRequest.productId();
+
                     ProductResponse product =
-                            productMap.get(itemRequest.productId());
+                            productMap.get(productId);
 
                     if (product == null) {
                         throw new RuntimeException(
-                                "Product not found: " + itemRequest.productId()
+                                "Product not found: " + productId
                         );
                     }
+
+                    InventoryResponse inventory =
+                            inventoryMap.get(productId);
+
+                    if (inventory == null) {
+                        throw new RuntimeException(
+                                "Inventory not found for product: "
+                                        + productId
+                        );
+                    }
+
+                    int availableQuantity =
+                            inventory.quantity()
+                                    - inventory.reservedQuantity();
+
+                    if (itemRequest.quantity() > availableQuantity) {
+                        throw new RuntimeException(
+                                "Insufficient inventory for product: "
+                                        + productId
+                        );
+                    }
+
+                    // Reserve inventory
+                    inventoryClient.reserveInventory(
+                            new ReserveInventoryRequest(
+                                    productId,
+                                    itemRequest.quantity()
+                            )
+                    );
 
                     return OrderItem.builder()
                             .productId(product.id())
@@ -80,7 +128,9 @@ public class OrderService {
                 .map(item ->
                         item.getUnitPrice()
                                 .multiply(
-                                        BigDecimal.valueOf(item.getQuantity())
+                                        BigDecimal.valueOf(
+                                                item.getQuantity()
+                                        )
                                 )
                 )
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

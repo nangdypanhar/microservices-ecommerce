@@ -2,12 +2,15 @@ package com.example.inventoryservice.controller;
 
 import com.example.inventoryservice.dto.CreateInventoryRequest;
 import com.example.inventoryservice.dto.InventoryResponse;
+import com.example.inventoryservice.dto.ReserveInventoryRequest;
 import com.example.inventoryservice.dto.UpdateInventoryRequest;
 import com.example.inventoryservice.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/inventories")
@@ -62,6 +65,21 @@ public class InventoryController {
         return ResponseEntity.ok(inventoryResponse);
     }
 
+    @PostMapping("/batch")
+    public ResponseEntity<List<InventoryResponse>> getInventories(
+            @RequestBody List<Long> productIds
+    ) {
+        return ResponseEntity.ok(
+                inventoryService.getInventories(productIds)
+        );
+    }
 
-
+    @PostMapping("/reserve")
+    public ResponseEntity<InventoryResponse> reserveInventory(
+            @RequestBody ReserveInventoryRequest request
+    ) {
+        return ResponseEntity.ok(
+                inventoryService.reserveInventory(request)
+        );
+    }
 }
